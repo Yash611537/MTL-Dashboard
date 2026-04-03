@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "./auth-provider";
 import { Sidebar } from "./sidebar";
 
 function MenuIcon({ className }: { className?: string }) {
@@ -11,7 +12,22 @@ function MenuIcon({ className }: { className?: string }) {
   );
 }
 
+function AuthLoading() {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-3 text-slate-500">
+        <span
+          className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"
+          aria-hidden
+        />
+        <span className="text-sm">Loading…</span>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
@@ -32,9 +48,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
 
+  if (loading) {
+    return <AuthLoading />;
+  }
+
+  if (!user) {
+    return <div className="min-h-[100dvh] bg-slate-50">{children}</div>;
+  }
+
   return (
     <div className="min-h-screen min-h-[100dvh] bg-slate-50">
-      {/* Mobile top bar */}
       <header className="sticky top-0 z-50 flex h-14 items-center gap-3 border-b border-slate-800 bg-slate-950 px-4 shadow-sm md:hidden">
         <button
           type="button"

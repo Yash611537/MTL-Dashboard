@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { useAuth } from "./auth-provider";
 
 const nav = [
   { href: "/", label: "Home" },
@@ -18,6 +19,7 @@ type Props = {
 
 export function Sidebar({ id, mobileOpen, onMobileClose }: Props) {
   const pathname = usePathname();
+  const { signOutUser, user } = useAuth();
 
   return (
     <aside
@@ -66,6 +68,23 @@ export function Sidebar({ id, mobileOpen, onMobileClose }: Props) {
           );
         })}
       </nav>
+      {user ? (
+        <div className="border-t border-slate-800 p-2">
+          <p className="truncate px-2 pb-2 text-xs text-slate-500" title={user.email ?? undefined}>
+            {user.email}
+          </p>
+          <button
+            type="button"
+            className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+            onClick={() => {
+              void signOutUser();
+              onMobileClose();
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }
