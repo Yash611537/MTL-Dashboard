@@ -1,0 +1,23 @@
+// Merge into Firestore rules under: match /databases/{database}/documents { ... }
+// Collection names must match NEXT_PUBLIC_FIRESTORE_*_LOG (defaults: Dashboard_Logins_Allowed / Dashboard_Logins_Rejected).
+
+    match /Dashboard_Logins_Allowed/{docId} {
+      allow create: if request.auth != null
+        && request.auth.token.email.matches(".*@mytronlabs[.]com$")
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.outcome == "allowed"
+        && request.resource.data.keys().hasAll(["uid", "email", "outcome", "loggedInAt", "displayName"]);
+      allow read: if request.auth != null
+        && request.auth.token.email.matches(".*@mytronlabs[.]com$");
+      allow update, delete: if false;
+    }
+
+    match /Dashboard_Logins_Rejected/{docId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.outcome == "denied_domain"
+        && request.resource.data.keys().hasAll(["uid", "email", "outcome", "loggedInAt", "displayName"]);
+      allow read: if request.auth != null
+        && request.auth.token.email.matches(".*@mytronlabs[.]com$");
+      allow update, delete: if false;
+    }

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { useAuth } from "./auth-provider";
+import { useAuth } from "@/contexts/auth-context";
 
 const nav = [
   { href: "/", label: "Home" },
   { href: "/sd-cards", label: "SD-Cards" },
+  { href: "/company-hours", label: "Company Hours" },
   { href: "/daily-transfers", label: "Daily Transfers" },
 ];
 
@@ -19,7 +20,7 @@ type Props = {
 
 export function Sidebar({ id, mobileOpen, onMobileClose }: Props) {
   const pathname = usePathname();
-  const { signOutUser, user } = useAuth();
+  const { user, signOutUser } = useAuth();
 
   return (
     <aside
@@ -45,7 +46,7 @@ export function Sidebar({ id, mobileOpen, onMobileClose }: Props) {
           </svg>
         </button>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {nav.map((item) => {
           const active =
             item.href === "/"
@@ -68,23 +69,23 @@ export function Sidebar({ id, mobileOpen, onMobileClose }: Props) {
           );
         })}
       </nav>
-      {user ? (
-        <div className="border-t border-slate-800 p-2">
-          <p className="truncate px-2 pb-2 text-xs text-slate-500" title={user.email ?? undefined}>
-            {user.email}
-          </p>
-          <button
-            type="button"
-            className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
-            onClick={() => {
-              void signOutUser();
-              onMobileClose();
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
+
+      <div className="mt-auto border-t border-slate-800 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <p className="truncate text-xs text-slate-500">Signed in</p>
+        <p className="mt-0.5 truncate text-sm font-medium text-slate-200" title={user?.email ?? undefined}>
+          {user?.email ?? "—"}
+        </p>
+        <button
+          type="button"
+          className="mt-3 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white"
+          onClick={() => {
+            void signOutUser();
+            onMobileClose();
+          }}
+        >
+          Sign out
+        </button>
+      </div>
     </aside>
   );
 }
