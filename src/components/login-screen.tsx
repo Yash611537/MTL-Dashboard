@@ -1,7 +1,10 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import { ALLOWED_EMAIL_DOMAIN } from "@/lib/auth-domain";
+import {
+  ALLOWED_EMAIL_DOMAIN,
+  loginUsesEmailAllowlist,
+} from "@/lib/auth-domain";
 
 export function LoginScreen() {
   const { signInWithGoogle, authError, clearAuthError, signingIn } = useAuth();
@@ -14,8 +17,18 @@ export function LoginScreen() {
         </p>
         <h1 className="mt-2 text-center text-2xl font-semibold text-white">Dashboard sign-in</h1>
         <p className="mt-3 text-center text-sm leading-relaxed text-slate-400">
-          Sign in with your Google workspace account. Only addresses ending with{" "}
-          <span className="font-mono text-brand-200">{ALLOWED_EMAIL_DOMAIN}</span> are allowed.
+          {loginUsesEmailAllowlist() ? (
+            <>
+              Sign in with Google. Access is limited to{" "}
+              <strong className="text-slate-200">approved {ALLOWED_EMAIL_DOMAIN}</strong> accounts
+              configured by your administrator.
+            </>
+          ) : (
+            <>
+              Sign in with your Google workspace account. Only addresses ending with{" "}
+              <span className="font-mono text-brand-200">{ALLOWED_EMAIL_DOMAIN}</span> are allowed.
+            </>
+          )}
         </p>
 
         {authError ? (

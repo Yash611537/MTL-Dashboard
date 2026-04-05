@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { isAllowedMytronEmail } from "@/lib/auth-domain";
+import { isLoginAllowed, loginUsesEmailAllowlist } from "@/lib/auth-domain";
 import { logAllowedLogin, logRejectedLogin } from "@/lib/login-logs";
 
 type AuthContextValue = {
@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const auth = getFirebaseAuth();
       unsubscribe = onAuthStateChanged(auth, (next) => {
         if (cancelled) return;
-        if (next && !isAllowedMytronEmail(next.email)) {
+        if (next && !isLoginAllowed(next.email)) {
           void signOut(auth);
           setUser(null);
           setLoading(false);
@@ -79,11 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signInWithPopup(auth, googleProvider);
       const signedIn = result.user;
 
-      if (!isAllowedMytronEmail(signedIn.email)) {
+      if (!isLoginAllowed(signedIn.email)) {
         await logRejectedLogin(signedIn);
         await signOut(auth);
         setAuthError(
-          "Only @mytronlabs.com accounts can use this dashboard. This sign-in attempt was logged."
+          loginUsesEmailAllowlist()
+            ? "This account is not on the approved list. Only selected team members can sign in. This attempt was logged."
+            : "Only @mytronlabs.com accounts can use this dashboard. This sign-in attempt was logged."
         );
         return;
       }

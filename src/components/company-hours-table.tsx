@@ -118,7 +118,8 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
     <div className="space-y-3 sm:space-y-4">
       <p className="text-sm text-slate-600">
         Most companies: one row per day. If the company name contains{" "}
-        <span className="font-medium text-slate-800">PRABANZAN</span> (any case), sessions are split
+        <span className="font-medium text-slate-800">PRABANZAN</span> or{" "}
+        <span className="font-medium text-slate-800">PRABANJAN</span> (any case), sessions are split
         into ≤7 h and &gt;7 h video rows; for the &gt;7 h row only, active hours per worker is half
         of the usual average. SESSION VIDEO is “—” when there is no split.
       </p>

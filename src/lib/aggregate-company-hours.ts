@@ -22,12 +22,13 @@ function companyLabel(name: string | undefined): string {
   return t || "—";
 }
 
-const PRABANZAN_MARK = "PRABANZAN";
+/** Company names containing any of these substrings (case-insensitive) use the ≤7h / &gt;7h split. */
+const SESSION_SPLIT_NAME_MARKERS = ["PRABANZAN", "PRABANJAN"] as const;
 
-/** Split / halve rule applies only when the stored company name contains PRABANZAN (any case). */
+/** True when `company_name` should use the PRABAN-style session split (PRABANZAN or PRABANJAN). */
 export function isPrabanzanCompanyName(name: string | undefined): boolean {
   const t = (name ?? "").trim().toUpperCase();
-  return t.includes(PRABANZAN_MARK);
+  return SESSION_SPLIT_NAME_MARKERS.some((m) => t.includes(m));
 }
 
 function segmentForRow(
@@ -52,7 +53,7 @@ export function hourSegmentLabel(s: CompanyHoursSegment): string {
 
 /**
  * Groups SD card sessions by company + calendar day.
- * For companies whose name contains "PRABANZAN" (case-insensitive), sessions with
+ * For companies whose name contains "PRABANZAN" or "PRABANJAN" (case-insensitive), sessions with
  * total_video_hours &gt; 7 are aggregated separately and that row's active hours
  * per worker is halved. All other companies get one row per day.
  */
