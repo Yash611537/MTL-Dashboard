@@ -3,14 +3,9 @@
 import { collection, onSnapshot, type FirestoreError } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { getDb } from "@/lib/firebase";
+import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
 import type { SdCardRow } from "@/types/sd-card";
 import { SdCardsTable } from "./sd-cards-table";
-
-function collectionName(): string {
-  return (
-    process.env.NEXT_PUBLIC_FIRESTORE_SD_CARDS_COLLECTION ?? "SD_CARDS"
-  );
-}
 
 export function SdCardsPanel() {
   const [rows, setRows] = useState<SdCardRow[]>([]);
@@ -26,7 +21,7 @@ export function SdCardsPanel() {
 
     try {
       const db = getDb();
-      const ref = collection(db, collectionName());
+      const ref = collection(db, sdCardsCollectionName());
       unsubscribe = onSnapshot(
         ref,
         (snap) => {

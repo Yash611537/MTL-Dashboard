@@ -45,6 +45,11 @@ export function companyHoursSegmentSortKey(s: CompanyHoursSegment): number {
   return 2;
 }
 
+/** Shown in TOTAL WORKERS: actual count × 2 for &gt;7 h session bucket rows. */
+export function displayTotalWorkers(row: CompanyHoursRow): number {
+  return row.hourSegment === "gt7" ? row.totalWorkers * 2 : row.totalWorkers;
+}
+
 export function hourSegmentLabel(s: CompanyHoursSegment): string {
   if (s === "gt7") return ">7 h / session";
   if (s === "le7") return "≤7 h / session";

@@ -1,5 +1,6 @@
 "use client";
 
+import { deleteDoc, doc } from "firebase/firestore";
 import {
   flexRender,
   getCoreRowModel,
@@ -11,6 +12,8 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { getDb } from "@/lib/firebase";
+import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
 import type { SdCardRow } from "@/types/sd-card";
 import {
   formatEmptyCard,
@@ -46,6 +49,36 @@ function globalFilterFn(row: { original: SdCardRow }, _columnId: string, filterV
     activeHours(r).toFixed(3),
   ];
   return parts.some((p) => String(p ?? "").toLowerCase().includes(q));
+}
+
+function DeleteSdCardButton({ id, summary }: { id: string; summary: string }) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      className="rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => {
+        const ok = window.confirm(
+          `Delete this SD card entry?\n\n${summary}\n\nThis removes the document from Firestore and cannot be undone.`
+        );
+        if (!ok) return;
+        setBusy(true);
+        void (async () => {
+          try {
+            await deleteDoc(doc(getDb(), sdCardsCollectionName(), id));
+          } catch (e) {
+            window.alert(e instanceof Error ? e.message : "Could not delete this entry.");
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+    >
+      {busy ? "Deleting…" : "Delete"}
+    </button>
+  );
 }
 
 export function SdCardsTable({ data }: { data: SdCardRow[] }) {
@@ -130,6 +163,18 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
           <span className="font-mono text-xs">{info.getValue<string>() ?? "—"}</span>
         ),
       },
+      {
+        id: "delete",
+        header: "Delete",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const r = row.original;
+          const summary = [r.company_name, r.device_id, formatMaybeDate(r.date_of_recording)]
+            .filter(Boolean)
+            .join(" · ");
+          return <DeleteSdCardButton id={r.id} summary={summary || r.id} />;
+        },
+      },
     ],
     []
   );
@@ -137,6 +182,7 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
   const table = useReactTable({
     data,
     columns,
+    getRowId: (row) => row.id,
     state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -190,7 +236,7 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] touch-pan-x">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
             <thead>
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id} className="border-b border-slate-200 bg-slate-50/90">
@@ -199,7 +245,7 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
                       key={header.id}
                       className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700"
                     >
-                      {header.isPlaceholder ? null : (
+                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-slate-200/80"
@@ -211,6 +257,10 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
                             desc: " ↓",
                           }[header.column.getIsSorted() as string] ?? null}
                         </button>
+                      ) : (
+                        <span className="inline-flex items-center px-1 py-0.5">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
                       )}
                     </th>
                   ))}

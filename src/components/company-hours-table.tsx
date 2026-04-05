@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import type { CompanyHoursRow } from "@/types/company-hours";
 import {
   companyHoursSegmentSortKey,
+  displayTotalWorkers,
   formatCompanyHoursDateCell,
   hourSegmentLabel,
 } from "@/lib/aggregate-company-hours";
@@ -37,7 +38,7 @@ function globalFilterFn(
     r.dateKey,
     formatCompanyHoursDateCell(r.dateKey),
     hourSegmentLabel(r.hourSegment),
-    String(r.totalWorkers),
+    String(displayTotalWorkers(r)),
     formatHours(r.totalVideoHours),
     formatHours(r.totalActiveHours),
     formatHours(r.activeHoursPerWorker),
@@ -73,12 +74,10 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
           companyHoursSegmentSortKey(b.original.hourSegment),
       },
       {
-        accessorKey: "totalWorkers",
+        id: "totalWorkersDisplay",
+        accessorFn: (row) => displayTotalWorkers(row),
         header: "TOTAL WORKERS",
-        cell: (info) => {
-          const v = info.getValue<number>();
-          return v.toLocaleString();
-        },
+        cell: ({ row }) => displayTotalWorkers(row.original).toLocaleString(),
       },
       {
         accessorKey: "totalVideoHours",
@@ -122,6 +121,10 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
         <span className="font-medium text-slate-800">PRABANJAN</span> (any case), sessions are split
         into ≤7 h and &gt;7 h video rows; for the &gt;7 h row only, active hours per worker is half
         of the usual average. SESSION VIDEO is “—” when there is no split.
+      </p>
+
+      <p className="text-sm font-bold text-red-600">
+        Total workers are multiplied by 2 in cards with more than 7 hours of recording
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
