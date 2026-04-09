@@ -14,7 +14,6 @@ import { useMemo, useState } from "react";
 import type { CompanyHoursRow } from "@/types/company-hours";
 import {
   companyHoursSegmentSortKey,
-  displayTotalWorkers,
   formatCompanyHoursDateCell,
   hourSegmentLabel,
 } from "@/lib/aggregate-company-hours";
@@ -38,7 +37,8 @@ function globalFilterFn(
     r.dateKey,
     formatCompanyHoursDateCell(r.dateKey),
     hourSegmentLabel(r.hourSegment),
-    String(displayTotalWorkers(r)),
+    String(r.totalWorkers),
+    String(r.hourSegment === "gt7" ? r.totalWorkers * 2 : r.totalWorkers),
     formatHours(r.totalVideoHours),
     formatHours(r.totalActiveHours),
     formatHours(r.activeHoursPerWorker),
@@ -74,10 +74,15 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
           companyHoursSegmentSortKey(b.original.hourSegment),
       },
       {
-        id: "totalWorkersDisplay",
-        accessorFn: (row) => displayTotalWorkers(row),
+        accessorKey: "totalWorkers",
         header: "TOTAL WORKERS",
-        cell: ({ row }) => displayTotalWorkers(row.original).toLocaleString(),
+        cell: ({ row }) => {
+          const workers =
+            row.original.hourSegment === "gt7"
+              ? row.original.totalWorkers * 2
+              : row.original.totalWorkers;
+          return workers.toLocaleString();
+        },
       },
       {
         accessorKey: "totalVideoHours",
@@ -124,7 +129,7 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
       </p>
 
       <p className="text-sm font-bold text-red-600">
-        Total workers are multiplied by 2 in cards with more than 7 hours of recording
+        Total workers are multiplied by 2 where cards with more than 7 hours of recording
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -9,7 +9,7 @@ const nav = [
   { href: "/", label: "Home" },
   { href: "/sd-cards", label: "SD-Cards" },
   { href: "/company-hours", label: "Company Hours" },
-  { href: "/daily-transfers", label: "Daily Transfers" },
+  { href: "/inventory-management", label: "Inventory Management" },
 ];
 
 type Props = {

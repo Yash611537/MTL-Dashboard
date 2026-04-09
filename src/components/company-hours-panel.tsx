@@ -4,19 +4,16 @@ import { collection, onSnapshot, type FirestoreError } from "firebase/firestore"
 import { useEffect, useMemo, useState } from "react";
 import { getDb } from "@/lib/firebase";
 import { aggregateCompanyHoursByDay } from "@/lib/aggregate-company-hours";
+import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
 import type { SdCardRow } from "@/types/sd-card";
+import { CompanyHoursAddDialog } from "./company-hours-add-dialog";
 import { CompanyHoursTable } from "./company-hours-table";
-
-function collectionName(): string {
-  return (
-    process.env.NEXT_PUBLIC_FIRESTORE_SD_CARDS_COLLECTION ?? "SD_CARDS"
-  );
-}
 
 export function CompanyHoursPanel() {
   const [rows, setRows] = useState<SdCardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,7 +24,7 @@ export function CompanyHoursPanel() {
 
     try {
       const db = getDb();
-      const ref = collection(db, collectionName());
+      const ref = collection(db, sdCardsCollectionName());
       unsubscribe = onSnapshot(
         ref,
         (snap) => {
@@ -87,5 +84,19 @@ export function CompanyHoursPanel() {
     );
   }
 
-  return <CompanyHoursTable data={aggregated} />;
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-end sm:mb-4">
+        <button
+          type="button"
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+          onClick={() => setAddOpen(true)}
+        >
+          Add entry
+        </button>
+      </div>
+      <CompanyHoursTable data={aggregated} />
+      <CompanyHoursAddDialog open={addOpen} onClose={() => setAddOpen(false)} />
+    </>
+  );
 }
