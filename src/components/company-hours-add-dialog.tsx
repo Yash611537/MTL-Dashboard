@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addDoc,
   collection,
@@ -9,17 +9,22 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
+import { hourSegmentLabel } from "@/lib/aggregate-company-hours";
 
 type Props = {
   open: boolean;
   onClose: () => void;
 };
 
+type SessionVideoChoice = "auto" | "all" | "le7" | "gt7";
+
 type FormValues = {
   companyName: string;
   recordingDate: string;
+  sessionVideo: SessionVideoChoice;
+  totalWorkers: string;
   totalVideoHours: string;
-  idleDuration: string;
+  totalActiveHours: string;
   deviceId: string;
   operatorName: string;
 };
@@ -27,12 +32,17 @@ type FormValues = {
 const fieldClass =
   "mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 
+const readOnlyFieldClass =
+  "mt-1 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 shadow-sm";
+
 function emptyForm(): FormValues {
   return {
     companyName: "",
     recordingDate: "",
+    sessionVideo: "auto",
+    totalWorkers: "1",
     totalVideoHours: "",
-    idleDuration: "",
+    totalActiveHours: "",
     deviceId: "",
     operatorName: "",
   };
@@ -45,10 +55,25 @@ function parseOptNumber(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parsePositiveInt(v: string): number | null {
+  const t = v.trim();
+  if (!t) return null;
+  const n = parseInt(t, 10);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return n;
+}
+
 export function CompanyHoursAddDialog({ open, onClose }: Props) {
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeHoursPerWorkerDisplay = useMemo(() => {
+    const workers = parsePositiveInt(form.totalWorkers);
+    const active = parseOptNumber(form.totalActiveHours);
+    if (workers == null || active == null || workers === 0) return "—";
+    return (active / workers).toLocaleString(undefined, { maximumFractionDigits: 3 });
+  }, [form.totalWorkers, form.totalActiveHours]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,11 +104,26 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
       return;
     }
     const totalVideoHours = parseOptNumber(form.totalVideoHours);
-    if (totalVideoHours == null) {
-      setError("Total hours must be a valid number.");
+    if (totalVideoHours == null || totalVideoHours < 0) {
+      setError("Total hours must be a valid non-negative number.");
       return;
     }
-    const idleDuration = parseOptNumber(form.idleDuration);
+    const totalActiveHours = parseOptNumber(form.totalActiveHours);
+    if (totalActiveHours == null || totalActiveHours < 0) {
+      setError("Total active hours must be a valid non-negative number.");
+      return;
+    }
+    if (totalActiveHours > totalVideoHours) {
+      setError("Total active hours cannot exceed total hours.");
+      return;
+    }
+    const workers = parsePositiveInt(form.totalWorkers);
+    if (workers == null) {
+      setError("Total workers must be a whole number of at least 1.");
+      return;
+    }
+
+    const idleDuration = totalVideoHours - totalActiveHours;
 
     setSaving(true);
     try {
@@ -93,6 +133,9 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
         date_of_recording: form.recordingDate,
         total_video_hours: totalVideoHours,
         idle_duration: idleDuration,
+        worker_count: workers,
+        session_segment:
+          form.sessionVideo === "auto" ? null : form.sessionVideo,
         device_id: form.deviceId.trim() || null,
         operator_name: form.operatorName.trim() || null,
         written_at_utc: serverTimestamp(),
@@ -136,7 +179,7 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
         <form className="mt-5 space-y-4" onSubmit={onSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="col-span-full block text-sm font-medium text-slate-700">
-              Company name *
+              COMPANY NAME *
               <input
                 type="text"
                 className={fieldClass}
@@ -146,7 +189,7 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
               />
             </label>
             <label className="block text-sm font-medium text-slate-700">
-              Date *
+              DATE *
               <input
                 type="date"
                 className={fieldClass}
@@ -155,7 +198,39 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
               />
             </label>
             <label className="block text-sm font-medium text-slate-700">
-              Total hours *
+              SESSION VIDEO
+              <select
+                className={fieldClass}
+                value={form.sessionVideo}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    sessionVideo: e.target.value as SessionVideoChoice,
+                  }))
+                }
+              >
+                <option value="auto">
+                  Auto (from company name &amp; total hours)
+                </option>
+                <option value="all">{hourSegmentLabel("all")}</option>
+                <option value="le7">{hourSegmentLabel("le7")}</option>
+                <option value="gt7">{hourSegmentLabel("gt7")}</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              TOTAL WORKERS *
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={fieldClass}
+                value={form.totalWorkers}
+                onChange={(e) => setForm((f) => ({ ...f, totalWorkers: e.target.value }))}
+                placeholder="1"
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              TOTAL HOURS *
               <input
                 type="number"
                 step="any"
@@ -167,17 +242,30 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
               />
             </label>
             <label className="block text-sm font-medium text-slate-700">
-              Idle hours
+              TOTAL ACTIVE HOURS *
               <input
                 type="number"
                 step="any"
                 min={0}
                 className={fieldClass}
-                value={form.idleDuration}
-                onChange={(e) => setForm((f) => ({ ...f, idleDuration: e.target.value }))}
-                placeholder="e.g. 1.2"
+                value={form.totalActiveHours}
+                onChange={(e) => setForm((f) => ({ ...f, totalActiveHours: e.target.value }))}
+                placeholder="e.g. 6.3"
               />
             </label>
+            <label className="block text-sm font-medium text-slate-700">
+              ACTIVE HOURS PER WORKER
+              <input
+                type="text"
+                readOnly
+                className={readOnlyFieldClass}
+                value={activeHoursPerWorkerDisplay}
+                aria-readonly="true"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-slate-700">
               Device ID
               <input
@@ -187,7 +275,7 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
                 onChange={(e) => setForm((f) => ({ ...f, deviceId: e.target.value }))}
               />
             </label>
-            <label className="col-span-full block text-sm font-medium text-slate-700">
+            <label className="block text-sm font-medium text-slate-700">
               Operator name
               <input
                 type="text"

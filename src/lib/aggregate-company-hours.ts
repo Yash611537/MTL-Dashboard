@@ -33,8 +33,12 @@ export function isPrabanzanCompanyName(name: string | undefined): boolean {
 
 function segmentForRow(
   companyNameRaw: string | undefined,
-  totalVideoHours: number
+  totalVideoHours: number,
+  override?: SdCardRow["session_segment"]
 ): CompanyHoursSegment {
+  if (override === "all" || override === "le7" || override === "gt7") {
+    return override;
+  }
   if (!isPrabanzanCompanyName(companyNameRaw)) return "all";
   return totalVideoHours > 7 ? "gt7" : "le7";
 }
@@ -76,13 +80,14 @@ export function aggregateCompanyHoursByDay(rows: SdCardRow[]): CompanyHoursRow[]
 
     const companyName = companyLabel(row.company_name);
     const tv = toNumber(row.total_video_hours) ?? 0;
-    const segment = segmentForRow(row.company_name, tv);
+    const segment = segmentForRow(row.company_name, tv, row.session_segment);
     const key = `${companyName}\0${dateKey}\0${segment}`;
     const active = activeHoursForRow(row);
+    const workerN = Math.max(1, Math.floor(toNumber(row.worker_count) ?? 1));
 
     const cur = map.get(key);
     if (cur) {
-      cur.workers += 1;
+      cur.workers += workerN;
       cur.video += tv;
       cur.active += active;
     } else {
@@ -90,7 +95,7 @@ export function aggregateCompanyHoursByDay(rows: SdCardRow[]): CompanyHoursRow[]
         companyName,
         dateKey,
         segment,
-        workers: 1,
+        workers: workerN,
         video: tv,
         active,
       });
