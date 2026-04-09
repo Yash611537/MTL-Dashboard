@@ -19,7 +19,7 @@ export default function HomePage() {
             Configure Firebase, enable Google Authentication, and set your Firestore collection names if needed. Then open{" "}
             <strong className="text-slate-800">SD-Cards</strong>,{" "}
             <strong className="text-slate-800">Company Hours</strong>, or{" "}
-            <strong className="text-slate-800">Inventory Management</strong> from the sidebar.
+            <strong className="text-slate-800">PREVIOUS JUNK</strong> from the sidebar.
           </p>
         </div>
       </main>
