@@ -125,7 +125,7 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
         <span className="font-medium text-slate-800">PRABANZAN</span> or{" "}
         <span className="font-medium text-slate-800">PRABANJAN</span> (any case), sessions are split
         into ≤7 h and &gt;7 h video rows; for the &gt;7 h row only, active hours per worker is half
-        of the usual average. SESSION VIDEO is “—” when there is no split.
+        of the usual average. SESSION VIDEO defaults to “&lt;7hr / session” when there is no split.
       </p>
 
       <p className="text-sm font-bold text-red-600">

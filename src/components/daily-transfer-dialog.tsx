@@ -5,6 +5,7 @@ import {
   addDoc,
   collection,
   doc,
+  serverTimestamp,
   updateDoc,
   type FirestoreError,
 } from "firebase/firestore";
@@ -142,7 +143,10 @@ export function DailyTransferDialog({ open, collectionName, editing, onClose }: 
       if (editing) {
         await updateDoc(doc(db, collectionName, editing.id), payload);
       } else {
-        await addDoc(coll, payload);
+        await addDoc(coll, {
+          ...payload,
+          stored_at_utc: serverTimestamp(),
+        });
       }
       onClose();
     } catch (err) {

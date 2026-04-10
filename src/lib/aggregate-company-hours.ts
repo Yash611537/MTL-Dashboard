@@ -52,7 +52,7 @@ export function companyHoursSegmentSortKey(s: CompanyHoursSegment): number {
 export function hourSegmentLabel(s: CompanyHoursSegment): string {
   if (s === "gt7") return ">7 h / session";
   if (s === "le7") return "≤7 h / session";
-  return "—";
+  return "<7hr / session";
 }
 
 /**

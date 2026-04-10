@@ -16,6 +16,9 @@ export interface DailyTransferFirestoreDoc {
   headset_missing?: number | null;
   missing_sd_cards_out_of_ddif?: number | null;
   empty_sd_cards?: number | null;
+  card_operator_name?: string | null;
+  /** When this document was first written to Firestore (used as “date of transfer” for reporting). */
+  stored_at_utc?: Timestamp | string | null;
 }
 
 export interface DailyTransferRow extends DailyTransferFirestoreDoc {

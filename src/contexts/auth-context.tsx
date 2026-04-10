@@ -44,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    const authLoadingTimeout = window.setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 5000);
 
     try {
       const auth = getFirebaseAuth();
@@ -67,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(authLoadingTimeout);
       unsubscribe?.();
     };
   }, []);

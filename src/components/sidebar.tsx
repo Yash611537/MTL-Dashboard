@@ -10,6 +10,7 @@ const nav = [
   { href: "/sd-cards", label: "SD-Cards" },
   { href: "/company-hours", label: "Company Hours" },
   { href: "/cycle-data", label: "Cycle Data" },
+  { href: "/daily-effeciency", label: "Daily Effeciency" },
   { href: "/inventory-management", label: "Inventory Management" },
   { href: "/PREVIOUS-JUNK", label: "PREVIOUS JUNK" },
 ];
