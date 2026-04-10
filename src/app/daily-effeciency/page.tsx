@@ -25,8 +25,7 @@ type DailyAggregate = {
   dateKey: string;
   cardsRead: number;
   emptyCardsFound: number;
-  /** Distinct card operators with activity that day */
-  operatorsLabel: string;
+  cardOperatorName: string;
   transferCount: number;
 };
 
@@ -60,8 +59,8 @@ function aggregateByStorageDay(rows: SdCardRow[]): DailyAggregate[] {
       dateKey,
       cardsRead: v.cards,
       emptyCardsFound: v.empty,
-      operatorsLabel:
-        v.ops.size === 0 ? "—" : Array.from(v.ops).sort((a, b) => a.localeCompare(b)).join(", "),
+      cardOperatorName:
+        v.ops.size === 0 ? "—" : Array.from(v.ops).sort((a, b) => a.localeCompare(b))[0] ?? "—",
       transferCount: v.count,
     }))
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
@@ -200,7 +199,7 @@ export default function DailyEffeciencyPage() {
                       EMPTY CARDS FOUND (DAY TOTAL)
                     </th>
                     <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
-                      CARD OPERATORS
+                      CARD OPERATOR NAME
                     </th>
                   </tr>
                 </thead>
@@ -227,8 +226,8 @@ export default function DailyEffeciencyPage() {
                           {d.emptyCardsFound.toLocaleString()}
                         </td>
                         <td className="max-w-[280px] px-3 py-2 text-slate-700">
-                          <span className="line-clamp-2" title={d.operatorsLabel}>
-                            {d.operatorsLabel}
+                          <span className="line-clamp-2" title={d.cardOperatorName}>
+                            {d.cardOperatorName}
                           </span>
                         </td>
                       </tr>
