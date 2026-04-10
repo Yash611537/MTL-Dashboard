@@ -165,6 +165,9 @@ export default function InventoryManagementFormPage() {
   const canSave = useMemo(() => {
     if (saving) return false;
     if (!form.date.trim() || !form.factoryName.trim()) return false;
+    if (!form.warehouseCity.trim()) return false;
+    if (!form.warehouseOperator.trim()) return false;
+    if (!form.factoryOperator.trim()) return false;
     if (form.packageType === "Dispatch" && !form.dispatchId.trim()) return false;
     if (form.packageType === "Return" && !form.linkedDispatchId.trim()) return false;
     return true;
@@ -250,8 +253,9 @@ export default function InventoryManagementFormPage() {
           <form className="mt-4 space-y-5" onSubmit={onSubmit}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <label className="block text-sm font-medium text-slate-700">
-                Package type
+                Package type *
                 <select
+                  required
                   className={fieldClass}
                   value={form.packageType}
                   onChange={(e) =>
@@ -265,9 +269,10 @@ export default function InventoryManagementFormPage() {
 
               {form.packageType === "Dispatch" ? (
                 <label className="block text-sm font-medium text-slate-700">
-                  Dispatch ID
+                  Dispatch ID *
                   <input
                     type="text"
+                    required
                     className={fieldClass}
                     value={form.dispatchId}
                     onChange={(e) => setForm((f) => ({ ...f, dispatchId: e.target.value }))}
@@ -276,7 +281,7 @@ export default function InventoryManagementFormPage() {
               ) : (
                 <label className="block text-sm font-medium text-slate-700">
                   <span className="inline-flex items-center gap-1.5">
-                    Dispatch ID
+                    Dispatch ID *
                     <HelpTip
                       text={
                         selectedDispatch
@@ -294,6 +299,7 @@ export default function InventoryManagementFormPage() {
                   <input
                     type="text"
                     list="dispatch-id-options"
+                    required
                     className={fieldClass}
                     value={form.linkedDispatchId}
                     onChange={(e) => handleSelectDispatchId(e.target.value)}
@@ -308,9 +314,10 @@ export default function InventoryManagementFormPage() {
               )}
 
               <label className="block text-sm font-medium text-slate-700">
-                Date
+                Date *
                 <input
                   type="date"
+                  required
                   className={fieldClass}
                   value={form.date}
                   onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
@@ -318,18 +325,20 @@ export default function InventoryManagementFormPage() {
               </label>
 
               <label className="block text-sm font-medium text-slate-700">
-                Factory name
+                Factory name *
                 <input
                   type="text"
+                  required
                   className={fieldClass}
                   value={form.factoryName}
                   onChange={(e) => setForm((f) => ({ ...f, factoryName: e.target.value }))}
                 />
               </label>
               <label className="block text-sm font-medium text-slate-700">
-                Warehouse city
+                Warehouse city *
                 <input
                   type="text"
+                  required
                   className={fieldClass}
                   value={form.warehouseCity}
                   onChange={(e) => setForm((f) => ({ ...f, warehouseCity: e.target.value }))}
@@ -338,11 +347,12 @@ export default function InventoryManagementFormPage() {
 
               <label className="block text-sm font-medium text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
-                  Warehouse operator
+                  Warehouse operator *
                   <HelpTip text="Person from warehouse who authorized this package" />
                 </span>
                 <input
                   type="text"
+                  required
                   className={fieldClass}
                   value={form.warehouseOperator}
                   onChange={(e) => setForm((f) => ({ ...f, warehouseOperator: e.target.value }))}
@@ -351,11 +361,12 @@ export default function InventoryManagementFormPage() {
 
               <label className="block text-sm font-medium text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
-                  Factory operator
+                  Factory operator *
                   <HelpTip text="Person who will carry the package to the factory" />
                 </span>
                 <input
                   type="text"
+                  required
                   className={fieldClass}
                   value={form.factoryOperator}
                   onChange={(e) => setForm((f) => ({ ...f, factoryOperator: e.target.value }))}

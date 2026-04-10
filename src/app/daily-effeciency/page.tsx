@@ -25,6 +25,7 @@ type DailyAggregate = {
   dateKey: string;
   cardsRead: number;
   emptyCardsFound: number;
+  /** Card operator names for that day */
   cardOperatorName: string;
   transferCount: number;
 };
@@ -48,7 +49,7 @@ function aggregateByStorageDay(rows: SdCardRow[]): DailyAggregate[] {
     // One SD_CARDS row is one processed card session.
     cur.cards += 1;
     if (isTrueLike(r.empty_card)) cur.empty += 1;
-    const op = (r.operator_name ?? "").trim();
+    const op = (r.card_operator_name ?? "").trim();
     if (op) cur.ops.add(op);
     cur.count += 1;
     map.set(dateKey, cur);
@@ -60,7 +61,7 @@ function aggregateByStorageDay(rows: SdCardRow[]): DailyAggregate[] {
       cardsRead: v.cards,
       emptyCardsFound: v.empty,
       cardOperatorName:
-        v.ops.size === 0 ? "—" : Array.from(v.ops).sort((a, b) => a.localeCompare(b))[0] ?? "—",
+        v.ops.size === 0 ? "—" : Array.from(v.ops).sort((a, b) => a.localeCompare(b)).join(", "),
       transferCount: v.count,
     }))
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));

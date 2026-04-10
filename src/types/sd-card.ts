@@ -7,6 +7,7 @@ export interface SdCardFirestoreDoc {
   company_type?: string;
   date_of_cop_paste?: Timestamp | string | null;
   date_of_recording?: Timestamp | string | null;
+  card_operator_name?: string;
   device_id?: string;
   empty_card?: boolean | string | number | null;
   files_copied?: number;
