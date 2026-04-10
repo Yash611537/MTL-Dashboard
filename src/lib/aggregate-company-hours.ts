@@ -23,7 +23,7 @@ function companyLabel(name: string | undefined): string {
 }
 
 /** Company names containing any of these substrings (case-insensitive) use the ≤7h / &gt;7h split. */
-const SESSION_SPLIT_NAME_MARKERS = ["PRABANZAN", "PRABANJAN"] as const;
+const SESSION_SPLIT_NAME_MARKERS = ["PRABANZAN", "PRABANJAN", "BANGARAPET"] as const;
 
 /** True when `company_name` should use the PRABAN-style session split (PRABANZAN or PRABANJAN). */
 export function isPrabanzanCompanyName(name: string | undefined): boolean {
