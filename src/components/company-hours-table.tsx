@@ -46,23 +46,7 @@ function globalFilterFn(
   return parts.some((p) => String(p ?? "").toLowerCase().includes(q));
 }
 
-export type CompanyHoursFirestoreBatchPagination = {
-  recordCount: number;
-  firestorePageSize: number;
-  canGoPrev: boolean;
-  canGoNext: boolean;
-  fetchingMore: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-};
-
-export function CompanyHoursTable({
-  data,
-  firestoreBatchPagination,
-}: {
-  data: CompanyHoursRow[];
-  firestoreBatchPagination?: CompanyHoursFirestoreBatchPagination;
-}) {
+export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "dateKey", desc: true }]);
   const [globalFilter, setGlobalFilter] = useState("");
 
@@ -281,35 +265,6 @@ export function CompanyHoursTable({
             </button>
           </div>
         </div>
-
-        {firestoreBatchPagination ? (
-          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/90 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-600">
-              Totals use up to {firestoreBatchPagination.recordCount.toLocaleString()} SD card record
-              {firestoreBatchPagination.recordCount !== 1 ? "s" : ""} (
-              {firestoreBatchPagination.firestorePageSize} per Firestore step). Use Next to load more
-              source data.
-            </p>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!firestoreBatchPagination.canGoPrev || firestoreBatchPagination.fetchingMore}
-                onClick={firestoreBatchPagination.onPrev}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!firestoreBatchPagination.canGoNext || firestoreBatchPagination.fetchingMore}
-                onClick={firestoreBatchPagination.onNext}
-              >
-                {firestoreBatchPagination.fetchingMore ? "Loading…" : "Next"}
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

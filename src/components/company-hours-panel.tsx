@@ -1,31 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { aggregateCompanyHoursByDay } from "@/lib/aggregate-company-hours";
-import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
-import { useSdCardsAccumulatedBatches } from "@/hooks/use-sd-cards-accumulated-batches";
+import { getDb } from "@/lib/firebase";
+import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
+import type { SdCardRow } from "@/types/sd-card";
 import { CompanyHoursAddDialog } from "./company-hours-add-dialog";
 import { CompanyHoursTable } from "./company-hours-table";
 
 export function CompanyHoursPanel() {
-  const {
-    rowsForAggregate,
-    loading,
-    fetchingMore,
-    error,
-    goNext,
-    goPrev,
-    canGoNext,
-    canGoPrev,
-    refresh,
-    recordCount,
-  } = useSdCardsAccumulatedBatches();
+  const [rows, setRows] = useState<SdCardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const aggregated = useMemo(
-    () => aggregateCompanyHoursByDay(rowsForAggregate),
-    [rowsForAggregate]
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const db = getDb();
+      const ref = collection(db, sdCardsCollectionName());
+      const q = query(ref, orderBy("written_at_utc", "desc"));
+      const snap = await getDocs(q);
+      const next: SdCardRow[] = snap.docs.map((doc) => ({
+        ...(doc.data() as Omit<SdCardRow, "id">),
+        id: doc.id,
+      }));
+      setRows(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load SD_CARDS");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const aggregated = useMemo(() => aggregateCompanyHoursByDay(rows), [rows]);
 
   if (loading) {
     return (
@@ -67,22 +81,11 @@ export function CompanyHoursPanel() {
           Add entry
         </button>
       </div>
-      <CompanyHoursTable
-        data={aggregated}
-        firestoreBatchPagination={{
-          recordCount,
-          firestorePageSize: FIRESTORE_PAGE_SIZE,
-          canGoPrev,
-          canGoNext,
-          fetchingMore,
-          onPrev: goPrev,
-          onNext: goNext,
-        }}
-      />
+      <CompanyHoursTable data={aggregated} />
       <CompanyHoursAddDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSaved={refresh}
+        onSaved={load}
       />
     </>
   );
