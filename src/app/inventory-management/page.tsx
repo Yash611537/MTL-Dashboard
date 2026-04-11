@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { Header } from "@/components/header";
-import { getEntries, type InventoryEntry, type PackageType } from "@/lib/inventoryService";
+import { useFirestoreCursorPage } from "@/hooks/use-firestore-cursor-page";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
+import type { InventoryEntry, PackageType } from "@/lib/inventoryService";
+
+const INVENTORY_COLLECTION = "inventory_management";
 
 function TypeBadge({ type }: { type: PackageType }) {
   if (type === "Dispatch") {
@@ -21,38 +25,30 @@ function TypeBadge({ type }: { type: PackageType }) {
 }
 
 export default function InventoryManagementPage() {
-  const [entries, setEntries] = useState<InventoryEntry[]>([]);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const rows = await getEntries();
-        if (!cancelled) setEntries(rows);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load inventory entries.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    rows: entries,
+    pageIndex,
+    setPageIndex,
+    loading,
+    pageLoading,
+    error,
+    pageCount,
+  } = useFirestoreCursorPage<InventoryEntry>({
+    collectionPath: INVENTORY_COLLECTION,
+    orderByField: "createdAt",
+    orderDirection: "desc",
+    mapDoc: (id, data) => ({ ...(data as Omit<InventoryEntry, "id">), id }),
+  });
+
+  const canGoNext = pageIndex + 1 < pageCount;
 
   return (
     <>
       <Header
         title="Inventory management"
-        subtitle="Track dispatch / return packages (table view)"
+        subtitle={`Track dispatch / return packages (${FIRESTORE_PAGE_SIZE} entries per Firestore request).`}
       />
       <main className="flex flex-1 flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6">
         <div className="flex justify-end">
@@ -76,142 +72,170 @@ export default function InventoryManagementPage() {
               Loading inventory entries...
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/90">
-                    <th className="w-10 px-3 py-2.5" />
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Type</th>
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Dispatch ID</th>
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Date</th>
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Factory</th>
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Wh. operator</th>
-                    <th className="px-3 py-2.5 font-semibold text-slate-700">Fac. operator</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {entries.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-12 text-center text-slate-500">
-                        No inventory entries yet.
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/90">
+                      <th className="w-10 px-3 py-2.5" />
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Type</th>
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Dispatch ID</th>
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Date</th>
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Factory</th>
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Wh. operator</th>
+                      <th className="px-3 py-2.5 font-semibold text-slate-700">Fac. operator</th>
                     </tr>
-                  ) : (
-                    entries.map((entry) => {
-                      const expanded = expandedRowId === entry.id;
-                      const cards = entry.inventory?.cards ?? {
-                        weightGrams: 0,
-                        totalCards: 0,
-                        filledCards: 0,
-                        cardsDeployed: 0,
-                      };
-                      const devices = entry.inventory?.devices ?? {
-                        count: 0,
-                        type: "",
-                        devicesDeployed: 0,
-                      };
-                      const chargers = entry.inventory?.chargers ?? { count: 0, type: "", ports: 0 };
-                      const dispatchId = entry.dispatchId || entry.linkedDispatchId || "—";
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {entries.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-12 text-center text-slate-500">
+                          No inventory entries yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      entries.map((entry) => {
+                        const expanded = expandedRowId === entry.id;
+                        const cards = entry.inventory?.cards ?? {
+                          weightGrams: 0,
+                          totalCards: 0,
+                          filledCards: 0,
+                          cardsDeployed: 0,
+                        };
+                        const devices = entry.inventory?.devices ?? {
+                          count: 0,
+                          type: "",
+                          devicesDeployed: 0,
+                        };
+                        const chargers = entry.inventory?.chargers ?? { count: 0, type: "", ports: 0 };
+                        const dispatchId = entry.dispatchId || entry.linkedDispatchId || "—";
 
-                      return (
-                        <Fragment key={entry.id}>
-                          <tr
-                            className="cursor-pointer transition-colors hover:bg-slate-50/70"
-                            onClick={() =>
-                              setExpandedRowId((prev) => (prev === entry.id ? null : entry.id ?? null))
-                            }
-                          >
-                            <td className="px-3 py-2 text-slate-500">
-                              <svg
-                                className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                                aria-hidden
-                              >
-                                <path
-                                  fillRule="evenodd"
-                                  d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2">
-                              <TypeBadge type={entry.packageType} />
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-800">{dispatchId}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                              {entry.date || "—"}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                              {entry.factoryName || "—"}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                              {entry.warehouseOperator || "—"}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                              {entry.factoryOperator || "—"}
-                            </td>
-                          </tr>
-                          {expanded ? (
-                            <tr className="bg-gray-50">
-                              <td colSpan={7} className="px-3 py-3">
-                                <div className="grid gap-3 md:grid-cols-2">
-                                  <div className="rounded-lg border border-gray-100 bg-white p-3">
-                                    <p className="text-xs text-slate-500">Cards</p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                                      Weight: {cards.weightGrams}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Total cards: {cards.totalCards}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Filled cards: {cards.filledCards}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Cards deployed: {cards.cardsDeployed ?? 0}
-                                    </p>
-                                  </div>
-                                  <div className="rounded-lg border border-gray-100 bg-white p-3">
-                                    <p className="text-xs text-slate-500">Devices</p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                                      Count: {devices.count}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Type: {devices.type || "—"}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Devices deployed: {devices.devicesDeployed ?? 0}
-                                    </p>
-                                  </div>
-                                  <div className="rounded-lg border border-gray-100 bg-white p-3">
-                                    <p className="text-xs text-slate-500">Chargers</p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                                      Count: {chargers.count}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Type: {chargers.type || "—"}
-                                    </p>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                      Ports: {chargers.ports}
-                                    </p>
-                                  </div>
-                                  <div className="rounded-lg border border-gray-100 bg-white p-3">
-                                    <p className="text-xs text-slate-500">Others</p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                                      {entry.inventory?.others || "—"}
-                                    </p>
-                                  </div>
-                                </div>
+                        return (
+                          <Fragment key={entry.id}>
+                            <tr
+                              className="cursor-pointer transition-colors hover:bg-slate-50/70"
+                              onClick={() =>
+                                setExpandedRowId((prev) => (prev === entry.id ? null : entry.id ?? null))
+                              }
+                            >
+                              <td className="px-3 py-2 text-slate-500">
+                                <svg
+                                  className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                  aria-hidden
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2">
+                                <TypeBadge type={entry.packageType} />
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-800">{dispatchId}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-800">
+                                {entry.date || "—"}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-800">
+                                {entry.factoryName || "—"}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-800">
+                                {entry.warehouseOperator || "—"}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-800">
+                                {entry.factoryOperator || "—"}
                               </td>
                             </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            {expanded ? (
+                              <tr className="bg-gray-50">
+                                <td colSpan={7} className="px-3 py-3">
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-lg border border-gray-100 bg-white p-3">
+                                      <p className="text-xs text-slate-500">Cards</p>
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        Weight: {cards.weightGrams}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Total cards: {cards.totalCards}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Filled cards: {cards.filledCards}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Cards deployed: {cards.cardsDeployed ?? 0}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-gray-100 bg-white p-3">
+                                      <p className="text-xs text-slate-500">Devices</p>
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        Count: {devices.count}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Type: {devices.type || "—"}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Devices deployed: {devices.devicesDeployed ?? 0}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-gray-100 bg-white p-3">
+                                      <p className="text-xs text-slate-500">Chargers</p>
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        Count: {chargers.count}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Type: {chargers.type || "—"}
+                                      </p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Ports: {chargers.ports}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-gray-100 bg-white p-3">
+                                      <p className="text-xs text-slate-500">Others</p>
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        {entry.inventory?.others || "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-600">
+                  Page {pageIndex + 1} of {pageCount || 1}
+                  {pageLoading ? (
+                    <span className="ml-2 font-medium text-brand-600">Loading…</span>
+                  ) : null}
+                </p>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={pageIndex === 0 || pageLoading}
+                    onClick={() => setPageIndex(pageIndex - 1)}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!canGoNext || pageLoading}
+                    onClick={() => setPageIndex(pageIndex + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </section>
       </main>

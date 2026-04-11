@@ -4,17 +4,22 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
 import { formatDailyTransferDateCell, normalizeDateToYyyyMmDd } from "@/lib/format";
 import type { DailyTransferRow } from "@/types/daily-transfer";
 
-const PAGE_SIZES = [10, 25, 50, 100] as const;
+type ServerPagination = {
+  pageIndex: number;
+  pageCount: number;
+  onPageChange: (index: number) => void;
+  pageLoading?: boolean;
+};
 
 function cellStr(v: unknown): string {
   if (v == null || v === "") return "—";
@@ -55,6 +60,7 @@ function dateSortKey(v: unknown): number {
 
 type Props = {
   data: DailyTransferRow[];
+  serverPagination: ServerPagination;
   onAdd: () => void;
   onEdit: (row: DailyTransferRow) => void;
   onDelete: (row: DailyTransferRow) => void | Promise<void>;
@@ -63,6 +69,7 @@ type Props = {
 
 export function DailyTransfersTable({
   data,
+  serverPagination,
   onAdd,
   onEdit,
   onDelete,
@@ -222,15 +229,32 @@ export function DailyTransfersTable({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter },
+    manualPagination: true,
+    pageCount: serverPagination.pageCount,
+    onPaginationChange: (updater) => {
+      const prev = {
+        pageIndex: serverPagination.pageIndex,
+        pageSize: FIRESTORE_PAGE_SIZE,
+      };
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next.pageIndex !== serverPagination.pageIndex) {
+        serverPagination.onPageChange(next.pageIndex);
+      }
+    },
+    state: {
+      sorting,
+      globalFilter,
+      pagination: {
+        pageIndex: serverPagination.pageIndex,
+        pageSize: FIRESTORE_PAGE_SIZE,
+      },
+    },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 25 } },
   });
 
   return (
@@ -278,6 +302,9 @@ export function DailyTransfersTable({
         <p className="text-center text-sm text-slate-500 sm:text-right">
           {table.getFilteredRowModel().rows.length} row
           {table.getFilteredRowModel().rows.length !== 1 ? "s" : ""}
+          {serverPagination.pageLoading ? (
+            <span className="ml-2 text-brand-600">Loading page…</span>
+          ) : null}
         </p>
       </div>
 
@@ -346,25 +373,14 @@ export function DailyTransfersTable({
 
         <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-            <span>Rows per page</span>
-            <select
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              value={table.getState().pagination.pageSize}
-              onChange={(e) => table.setPageSize(Number(e.target.value))}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <span>Rows per page: {FIRESTORE_PAGE_SIZE} (Firestore)</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
             <button
               type="button"
               className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              disabled={!table.getCanPreviousPage() || serverPagination.pageLoading}
             >
               Previous
             </button>
@@ -376,7 +392,7 @@ export function DailyTransfersTable({
               type="button"
               className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              disabled={!table.getCanNextPage() || serverPagination.pageLoading}
             >
               Next
             </button>

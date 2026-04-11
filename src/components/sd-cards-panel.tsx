@@ -1,54 +1,26 @@
 "use client";
 
-import { collection, onSnapshot, type FirestoreError } from "firebase/firestore";
-import { useEffect, useState } from "react";
-import { getDb } from "@/lib/firebase";
+import { useFirestoreCursorPage } from "@/hooks/use-firestore-cursor-page";
 import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
 import type { SdCardRow } from "@/types/sd-card";
 import { SdCardsTable } from "./sd-cards-table";
 
 export function SdCardsPanel() {
-  const [rows, setRows] = useState<SdCardRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    let unsubscribe: (() => void) | undefined;
-
-    try {
-      const db = getDb();
-      const ref = collection(db, sdCardsCollectionName());
-      unsubscribe = onSnapshot(
-        ref,
-        (snap) => {
-          if (cancelled) return;
-          const next: SdCardRow[] = snap.docs.map((doc) => {
-            const data = doc.data() as Omit<SdCardRow, "id">;
-            return { ...data, id: doc.id };
-          });
-          setRows(next);
-          setLoading(false);
-        },
-        (err: FirestoreError) => {
-          if (cancelled) return;
-          setError(err.message || "Firestore error");
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to connect to Firebase");
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, []);
+  const {
+    rows,
+    pageIndex,
+    setPageIndex,
+    loading,
+    pageLoading,
+    error,
+    pageCount,
+    refresh,
+  } = useFirestoreCursorPage<SdCardRow>({
+    collectionPath: sdCardsCollectionName(),
+    orderByField: "written_at_utc",
+    orderDirection: "desc",
+    mapDoc: (id, data) => ({ ...(data as Omit<SdCardRow, "id">), id }),
+  });
 
   if (loading) {
     return (
@@ -79,5 +51,16 @@ export function SdCardsPanel() {
     );
   }
 
-  return <SdCardsTable data={rows} />;
+  return (
+    <SdCardsTable
+      data={rows}
+      serverPagination={{
+        pageIndex,
+        pageCount,
+        onPageChange: setPageIndex,
+        pageLoading,
+      }}
+      onDataInvalidate={refresh}
+    />
+  );
 }

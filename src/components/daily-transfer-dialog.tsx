@@ -109,9 +109,11 @@ type Props = {
   /** null = add new */
   editing: DailyTransferRow | null;
   onClose: () => void;
+  /** Called after a successful save (add or update). */
+  onSaved?: () => void;
 };
 
-export function DailyTransferDialog({ open, collectionName, editing, onClose }: Props) {
+export function DailyTransferDialog({ open, collectionName, editing, onClose, onSaved }: Props) {
   const [form, setForm] = useState<DailyTransferFormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export function DailyTransferDialog({ open, collectionName, editing, onClose }: 
           stored_at_utc: serverTimestamp(),
         });
       }
+      onSaved?.();
       onClose();
     } catch (err) {
       const msg =

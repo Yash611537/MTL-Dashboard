@@ -15,6 +15,35 @@ export function formatMaybeDate(
   return "—";
 }
 
+/** ISO datetimes, Timestamps, epoch ms, or plain `HH:MM` / `H:MM:SS` → `HH:MM` (24h). */
+export function formatMaybeTimeHHMM(v: unknown): string {
+  if (v == null || v === "") return "—";
+  if (
+    typeof v === "object" &&
+    v !== null &&
+    "toDate" in v &&
+    typeof (v as Timestamp).toDate === "function"
+  ) {
+    return format((v as Timestamp).toDate(), "HH:mm");
+  }
+  if (typeof v === "number" && !Number.isNaN(v)) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? "—" : format(d, "HH:mm");
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return format(d, "HH:mm");
+    const simple = /^(\d{1,2}):(\d{2})(?::\d+(?:\.\d+)?)?$/.exec(s);
+    if (simple) {
+      const h = simple[1].padStart(2, "0");
+      return `${h}:${simple[2]}`;
+    }
+    return s;
+  }
+  return "—";
+}
+
 /** Display idle like 1:24 as 1.24 (after-colon part becomes the decimal tail; single-digit minutes padded). */
 export function formatIdleDisplay(v: unknown): string {
   if (v == null || v === "") return "—";

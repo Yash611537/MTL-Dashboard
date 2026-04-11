@@ -1,8 +1,8 @@
 "use client";
 
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { Fragment, useEffect, useState } from "react";
-import { getDb } from "@/lib/firebase";
+import { Fragment, useState } from "react";
+import { useFirestoreCursorPage } from "@/hooks/use-firestore-cursor-page";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
 
 type CardStatus = "success" | "failed";
 
@@ -36,29 +36,67 @@ function safeText(v: unknown): string {
   return t || "—";
 }
 
-function sessionStatus(values: Array<CardStatus | string>): "all_ok" | "has_errors" {
-  if (values.length === 0) return "all_ok";
-  return values.every((s) => s === "success") ? "all_ok" : "has_errors";
+function normalizeStatus(s: unknown): string {
+  return typeof s === "string" ? s.trim().toLowerCase() : "";
 }
 
-function statusBadge(kind: "all_ok" | "has_errors" | CardStatus | string) {
-  if (kind === "all_ok") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-        All ok
-      </span>
-    );
+/** Empty slot: explicit status or legacy failed + zero duration (no real transfer). */
+function isEmptyCard(rawStatus: unknown, durationSec: number): boolean {
+  const n = normalizeStatus(rawStatus);
+  if (n === "empty") return true;
+  if (n === "success") return false;
+  return durationSec === 0;
+}
+
+/** Real failure for session summary (not empty). */
+function isRealFailure(rawStatus: unknown, durationSec: number): boolean {
+  if (isEmptyCard(rawStatus, durationSec)) return false;
+  return normalizeStatus(rawStatus) !== "success";
+}
+
+function sessionOverallStatus(row: SessionDoc, cardIds: string[]): "success" | "has_errors" {
+  if (cardIds.length === 0) return "success";
+  for (const id of cardIds) {
+    const raw = row.per_card_status?.[id];
+    const dur = row.per_card_duration_seconds?.[id] ?? 0;
+    if (isRealFailure(raw, dur)) return "has_errors";
   }
-  if (kind === "has_errors" || kind === "failed") {
+  return "success";
+}
+
+function sessionStatusBadge(kind: "success" | "has_errors") {
+  if (kind === "has_errors") {
     return (
       <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
-        {kind === "has_errors" ? "Has errors" : "failed"}
+        Has errors
       </span>
     );
   }
   return (
     <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-      success
+      Success
+    </span>
+  );
+}
+
+function cardRowStatusBadge(kind: "success" | "failed" | "empty") {
+  if (kind === "empty") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        Empty
+      </span>
+    );
+  }
+  if (kind === "failed") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+        failed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+      Success
     </span>
   );
 }
@@ -73,42 +111,24 @@ function perCardIds(s: SessionDoc): string[] {
 }
 
 export function SessionTable() {
-  const [rows, setRows] = useState<SessionDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    rows,
+    pageIndex,
+    setPageIndex,
+    loading,
+    pageLoading,
+    error,
+    pageCount,
+  } = useFirestoreCursorPage<SessionDoc>({
+    collectionPath: "CYCLE_DATA",
+    orderByField: "written_at_utc",
+    orderDirection: "desc",
+    mapDoc: (id, data) => ({ ...(data as Omit<SessionDoc, "id">), id }),
+  });
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const db = getDb();
-        const ref = collection(db, "CYCLE_DATA");
-        const q = query(ref, orderBy("written_at_utc", "desc"));
-        const snap = await getDocs(q);
-        if (cancelled) return;
-        const next: SessionDoc[] = snap.docs.map((doc) => {
-          const data = doc.data() as Omit<SessionDoc, "id">;
-          return { ...data, id: doc.id };
-        });
-        setRows(next);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load CYCLE_DATA");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const hasRows = rows.length > 0;
+  const canGoNext = pageIndex + 1 < pageCount;
 
   if (loading) {
     return (
@@ -173,7 +193,7 @@ export function SessionTable() {
               ) : (
                 rows.map((row) => {
                   const cards = perCardIds(row);
-                  const sStatus = sessionStatus(Object.values(row.per_card_status ?? {}));
+                  const sStatus = sessionOverallStatus(row, cards);
                   const expanded = expandedRowId === row.id;
                   const cycleNumber =
                     typeof row.cycle_number === "number" ? String(row.cycle_number) : "—";
@@ -218,7 +238,7 @@ export function SessionTable() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-800">
                           {safeText(row.ssd_id)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2">{statusBadge(sStatus)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{sessionStatusBadge(sStatus)}</td>
                       </tr>
                       {expanded ? (
                         <tr className="bg-slate-50/70">
@@ -254,13 +274,17 @@ export function SessionTable() {
                                       </tr>
                                     ) : (
                                       cards.map((cardId) => {
-                                        const rawStatus = row.per_card_status?.[cardId] ?? "failed";
-                                        const status: CardStatus =
-                                          rawStatus === "success" ? "success" : "failed";
+                                        const rawStatus = row.per_card_status?.[cardId];
                                         const durationSec = row.per_card_duration_seconds?.[cardId] ?? 0;
+                                        const empty = isEmptyCard(rawStatus, durationSec);
+                                        const cardKind: "success" | "failed" | "empty" = empty
+                                          ? "empty"
+                                          : normalizeStatus(rawStatus) === "success"
+                                            ? "success"
+                                            : "failed";
                                         const speed = row.per_card_speed_mbps?.[cardId];
                                         const note = row.per_card_note?.[cardId];
-                                        const hidePerf = status === "failed" && durationSec === 0;
+                                        const hidePerf = empty;
                                         const speedDisplay =
                                           hidePerf || typeof speed !== "number"
                                             ? "—"
@@ -283,7 +307,7 @@ export function SessionTable() {
                                               {safeText(note)}
                                             </td>
                                             <td className="whitespace-nowrap px-3 py-2">
-                                              {statusBadge(status)}
+                                              {cardRowStatusBadge(cardKind)}
                                             </td>
                                           </tr>
                                         );
@@ -302,6 +326,32 @@ export function SessionTable() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-600">
+            {FIRESTORE_PAGE_SIZE} sessions per request · Page {pageIndex + 1} of {pageCount || 1}
+            {pageLoading ? (
+              <span className="ml-2 font-medium text-brand-600">Loading…</span>
+            ) : null}
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={pageIndex === 0 || pageLoading}
+              onClick={() => setPageIndex(pageIndex - 1)}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!canGoNext || pageLoading}
+              onClick={() => setPageIndex(pageIndex + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

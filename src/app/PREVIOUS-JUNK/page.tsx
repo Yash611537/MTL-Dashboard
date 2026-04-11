@@ -6,7 +6,7 @@ export default function DailyTransfersPage() {
     <>
       <Header
         title="PREVIOUS JUNK"
-        subtitle="Add and edit rows — synced live with Firestore."
+        subtitle="Add and edit rows — 25 documents per page from Firestore."
       />
       <main className="flex flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6">
         <DailyTransfersPanel />

@@ -5,7 +5,6 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
@@ -22,8 +21,14 @@ import {
   idleDurationAsNumber,
   toNumber,
 } from "@/lib/format";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
 
-const PAGE_SIZES = [10, 25, 50, 100] as const;
+type ServerPagination = {
+  pageIndex: number;
+  pageCount: number;
+  onPageChange: (index: number) => void;
+  pageLoading?: boolean;
+};
 
 function activeHours(row: SdCardRow): number {
   const tv = toNumber(row.total_video_hours) ?? 0;
@@ -51,7 +56,15 @@ function globalFilterFn(row: { original: SdCardRow }, _columnId: string, filterV
   return parts.some((p) => String(p ?? "").toLowerCase().includes(q));
 }
 
-function DeleteSdCardButton({ id, summary }: { id: string; summary: string }) {
+function DeleteSdCardButton({
+  id,
+  summary,
+  onDeleted,
+}: {
+  id: string;
+  summary: string;
+  onDeleted?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
 
   return (
@@ -68,6 +81,7 @@ function DeleteSdCardButton({ id, summary }: { id: string; summary: string }) {
         void (async () => {
           try {
             await deleteDoc(doc(getDb(), sdCardsCollectionName(), id));
+            onDeleted?.();
           } catch (e) {
             window.alert(e instanceof Error ? e.message : "Could not delete this entry.");
           } finally {
@@ -81,7 +95,15 @@ function DeleteSdCardButton({ id, summary }: { id: string; summary: string }) {
   );
 }
 
-export function SdCardsTable({ data }: { data: SdCardRow[] }) {
+export function SdCardsTable({
+  data,
+  serverPagination,
+  onDataInvalidate,
+}: {
+  data: SdCardRow[];
+  serverPagination: ServerPagination;
+  onDataInvalidate?: () => void;
+}) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "date_of_recording", desc: true },
   ]);
@@ -172,26 +194,49 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
           const summary = [r.company_name, r.device_id, formatMaybeDate(r.date_of_recording)]
             .filter(Boolean)
             .join(" · ");
-          return <DeleteSdCardButton id={r.id} summary={summary || r.id} />;
+          return (
+            <DeleteSdCardButton
+              id={r.id}
+              summary={summary || r.id}
+              onDeleted={onDataInvalidate}
+            />
+          );
         },
       },
     ],
-    []
+    [onDataInvalidate]
   );
 
   const table = useReactTable({
     data,
     columns,
     getRowId: (row) => row.id,
-    state: { sorting, globalFilter },
+    manualPagination: true,
+    pageCount: serverPagination.pageCount,
+    onPaginationChange: (updater) => {
+      const prev = {
+        pageIndex: serverPagination.pageIndex,
+        pageSize: FIRESTORE_PAGE_SIZE,
+      };
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next.pageIndex !== serverPagination.pageIndex) {
+        serverPagination.onPageChange(next.pageIndex);
+      }
+    },
+    state: {
+      sorting,
+      globalFilter,
+      pagination: {
+        pageIndex: serverPagination.pageIndex,
+        pageSize: FIRESTORE_PAGE_SIZE,
+      },
+    },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 25 } },
   });
 
   return (
@@ -227,6 +272,9 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
         <p className="text-center text-sm text-slate-500 sm:text-right">
           {table.getFilteredRowModel().rows.length} row
           {table.getFilteredRowModel().rows.length !== 1 ? "s" : ""}
+          {serverPagination.pageLoading ? (
+            <span className="ml-2 text-brand-600">Loading page…</span>
+          ) : null}
         </p>
       </div>
 
@@ -297,25 +345,14 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
 
         <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-            <span>Rows per page</span>
-            <select
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-              value={table.getState().pagination.pageSize}
-              onChange={(e) => table.setPageSize(Number(e.target.value))}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <span>Rows per page: {FIRESTORE_PAGE_SIZE} (Firestore)</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
             <button
               type="button"
               className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              disabled={!table.getCanPreviousPage() || serverPagination.pageLoading}
             >
               Previous
             </button>
@@ -327,7 +364,7 @@ export function SdCardsTable({ data }: { data: SdCardRow[] }) {
               type="button"
               className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              disabled={!table.getCanNextPage() || serverPagination.pageLoading}
             >
               Next
             </button>

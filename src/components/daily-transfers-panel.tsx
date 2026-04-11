@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  type FirestoreError,
-} from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { deleteDoc, doc } from "firebase/firestore";
+import { useState } from "react";
+import { useFirestoreCursorPage } from "@/hooks/use-firestore-cursor-page";
 import { getDb } from "@/lib/firebase";
 import type { DailyTransferRow } from "@/types/daily-transfer";
 import { DailyTransferDialog } from "./daily-transfer-dialog";
@@ -20,49 +15,26 @@ function collectionName(): string {
 }
 
 export function DailyTransfersPanel() {
-  const [rows, setRows] = useState<DailyTransferRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const coll = collectionName();
+  const {
+    rows,
+    pageIndex,
+    setPageIndex,
+    loading,
+    pageLoading,
+    error,
+    pageCount,
+    refresh,
+  } = useFirestoreCursorPage<DailyTransferRow>({
+    collectionPath: coll,
+    orderByField: "stored_at_utc",
+    orderDirection: "desc",
+    mapDoc: (id, data) => ({ ...(data as Omit<DailyTransferRow, "id">), id }),
+  });
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DailyTransferRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const coll = collectionName();
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    let unsubscribe: (() => void) | undefined;
-    try {
-      const db = getDb();
-      const ref = collection(db, coll);
-      unsubscribe = onSnapshot(
-        ref,
-        (snap) => {
-          if (cancelled) return;
-          const next: DailyTransferRow[] = snap.docs.map((docSnap) => {
-            const data = docSnap.data() as Omit<DailyTransferRow, "id">;
-            return { ...data, id: docSnap.id };
-          });
-          setRows(next);
-          setLoading(false);
-        },
-        (err: FirestoreError) => {
-          if (cancelled) return;
-          setError(err.message || "Firestore error");
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to connect to Firebase");
-      setLoading(false);
-    }
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [coll]);
 
   function openAdd() {
     setEditing(null);
@@ -85,6 +57,7 @@ export function DailyTransfersPanel() {
       const db = getDb();
       await deleteDoc(doc(db, coll, row.id));
       if (editing?.id === row.id) closeDialog();
+      refresh();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Delete failed";
       window.alert(msg);
@@ -101,7 +74,7 @@ export function DailyTransfersPanel() {
             className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"
             aria-hidden
           />
-          Loading PREVIOUS-JUNK…
+          Loading daily transfers…
         </div>
       </div>
     );
@@ -112,6 +85,10 @@ export function DailyTransfersPanel() {
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-900">
         <p className="font-medium">Could not load data</p>
         <p className="mt-1 text-red-800">{error}</p>
+        <p className="mt-2 text-xs text-red-800/90">
+          Ensure Firestore has an index for <code className="rounded bg-red-100 px-1">stored_at_utc</code>{" "}
+          (and that documents include this field).
+        </p>
       </div>
     );
   }
@@ -120,6 +97,12 @@ export function DailyTransfersPanel() {
     <>
       <DailyTransfersTable
         data={rows}
+        serverPagination={{
+          pageIndex,
+          pageCount,
+          onPageChange: setPageIndex,
+          pageLoading,
+        }}
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -130,6 +113,7 @@ export function DailyTransfersPanel() {
         collectionName={coll}
         editing={editing}
         onClose={closeDialog}
+        onSaved={refresh}
       />
     </>
   );

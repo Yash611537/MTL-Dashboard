@@ -1,9 +1,9 @@
 "use client";
 
-import { collection, onSnapshot, type FirestoreError } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Header } from "@/components/header";
-import { getDb } from "@/lib/firebase";
+import { useSdCardsAccumulatedBatches } from "@/hooks/use-sd-cards-accumulated-batches";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
 import { normalizeDateToYyyyMmDd } from "@/lib/format";
 import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
 import type { SdCardRow } from "@/types/sd-card";
@@ -78,46 +78,18 @@ function yesterdayKey(): string {
 }
 
 export default function DailyEffeciencyPage() {
-  const [rows, setRows] = useState<SdCardRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const coll = collectionName();
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    let unsubscribe: (() => void) | undefined;
-
-    try {
-      const db = getDb();
-      unsubscribe = onSnapshot(
-        collection(db, coll),
-        (snap) => {
-          if (cancelled) return;
-          const next: SdCardRow[] = snap.docs.map((docSnap) => {
-            const data = docSnap.data() as Omit<SdCardRow, "id">;
-            return { ...data, id: docSnap.id };
-          });
-          setRows(next);
-          setLoading(false);
-        },
-        (err: FirestoreError) => {
-          if (cancelled) return;
-          setError(err.message || "Firestore error");
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to connect to Firebase");
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [coll]);
+  const {
+    rowsForAggregate: rows,
+    loading,
+    fetchingMore,
+    error,
+    goNext,
+    goPrev,
+    canGoNext,
+    canGoPrev,
+    recordCount,
+  } = useSdCardsAccumulatedBatches();
 
   const byDay = useMemo(() => aggregateByStorageDay(rows), [rows]);
 
@@ -136,9 +108,36 @@ export default function DailyEffeciencyPage() {
     <>
       <Header
         title="Daily Effeciency"
-        subtitle="Per day by SD_CARDS date of copy paste: total cards read and empty cards found."
+        subtitle={`Per day by SD_CARDS date of copy paste (${coll}). Data loads in batches of 25 documents.`}
       />
       <main className="flex flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6">
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-700">
+            Showing totals from up to{" "}
+            <span className="font-semibold text-slate-900">{recordCount.toLocaleString()}</span>{" "}
+            SD card record{recordCount !== 1 ? "s" : ""} ({FIRESTORE_PAGE_SIZE} per Firestore step).
+            Use Next to include more.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!canGoPrev || fetchingMore}
+              onClick={goPrev}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!canGoNext || fetchingMore}
+              onClick={goNext}
+            >
+              {fetchingMore ? "Loading…" : "Next"}
+            </button>
+          </div>
+        </div>
+
         <div className="mb-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">Today ({today})</p>
@@ -149,7 +148,9 @@ export default function DailyEffeciencyPage() {
                 <span className="font-semibold">{todayAgg.emptyCardsFound.toLocaleString()}</span>
               </p>
             ) : (
-              <p className="mt-1 text-sm text-amber-700">No Firebase records found for today.</p>
+              <p className="mt-1 text-sm text-amber-700">
+                No SD_CARDS rows in the loaded sample for today.
+              </p>
             )}
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -164,7 +165,9 @@ export default function DailyEffeciencyPage() {
                 </span>
               </p>
             ) : (
-              <p className="mt-1 text-sm text-amber-700">No Firebase records found for yesterday.</p>
+              <p className="mt-1 text-sm text-amber-700">
+                No SD_CARDS rows in the loaded sample for yesterday.
+              </p>
             )}
           </div>
         </div>
@@ -208,7 +211,7 @@ export default function DailyEffeciencyPage() {
                   {byDay.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-3 py-12 text-center text-slate-500">
-                        No SD_CARDS rows with a valid copy-paste date.
+                        No SD_CARDS rows with a valid copy-paste date in the loaded sample.
                       </td>
                     </tr>
                   ) : (
@@ -238,8 +241,8 @@ export default function DailyEffeciencyPage() {
               </table>
             </div>
             <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
-              Each row is one calendar day by date of copy paste. Numbers are totals of all SD_CARDS
-              records for that day.
+              Each row is one calendar day by date of copy paste. Numbers reflect only SD_CARDS
+              records included via the steps above (not necessarily the full collection).
             </p>
           </div>
         )}

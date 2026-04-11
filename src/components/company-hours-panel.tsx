@@ -1,59 +1,31 @@
 "use client";
 
-import { collection, onSnapshot, type FirestoreError } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
-import { getDb } from "@/lib/firebase";
+import { useMemo, useState } from "react";
 import { aggregateCompanyHoursByDay } from "@/lib/aggregate-company-hours";
-import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
-import type { SdCardRow } from "@/types/sd-card";
+import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
+import { useSdCardsAccumulatedBatches } from "@/hooks/use-sd-cards-accumulated-batches";
 import { CompanyHoursAddDialog } from "./company-hours-add-dialog";
 import { CompanyHoursTable } from "./company-hours-table";
 
 export function CompanyHoursPanel() {
-  const [rows, setRows] = useState<SdCardRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    rowsForAggregate,
+    loading,
+    fetchingMore,
+    error,
+    goNext,
+    goPrev,
+    canGoNext,
+    canGoPrev,
+    refresh,
+    recordCount,
+  } = useSdCardsAccumulatedBatches();
   const [addOpen, setAddOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    let unsubscribe: (() => void) | undefined;
-
-    try {
-      const db = getDb();
-      const ref = collection(db, sdCardsCollectionName());
-      unsubscribe = onSnapshot(
-        ref,
-        (snap) => {
-          if (cancelled) return;
-          const next: SdCardRow[] = snap.docs.map((doc) => {
-            const data = doc.data() as Omit<SdCardRow, "id">;
-            return { ...data, id: doc.id };
-          });
-          setRows(next);
-          setLoading(false);
-        },
-        (err: FirestoreError) => {
-          if (cancelled) return;
-          setError(err.message || "Firestore error");
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to connect to Firebase");
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, []);
-
-  const aggregated = useMemo(() => aggregateCompanyHoursByDay(rows), [rows]);
+  const aggregated = useMemo(
+    () => aggregateCompanyHoursByDay(rowsForAggregate),
+    [rowsForAggregate]
+  );
 
   if (loading) {
     return (
@@ -86,7 +58,7 @@ export function CompanyHoursPanel() {
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-end sm:mb-4">
+      <div className="mb-3 flex justify-end sm:mb-4">
         <button
           type="button"
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
@@ -95,8 +67,23 @@ export function CompanyHoursPanel() {
           Add entry
         </button>
       </div>
-      <CompanyHoursTable data={aggregated} />
-      <CompanyHoursAddDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <CompanyHoursTable
+        data={aggregated}
+        firestoreBatchPagination={{
+          recordCount,
+          firestorePageSize: FIRESTORE_PAGE_SIZE,
+          canGoPrev,
+          canGoNext,
+          fetchingMore,
+          onPrev: goPrev,
+          onNext: goNext,
+        }}
+      />
+      <CompanyHoursAddDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSaved={refresh}
+      />
     </>
   );
 }

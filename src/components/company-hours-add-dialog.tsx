@@ -14,6 +14,7 @@ import { hourSegmentLabel } from "@/lib/aggregate-company-hours";
 type Props = {
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 };
 
 type SessionVideoChoice = "auto" | "all" | "le7" | "gt7";
@@ -63,7 +64,7 @@ function parsePositiveInt(v: string): number | null {
   return n;
 }
 
-export function CompanyHoursAddDialog({ open, onClose }: Props) {
+export function CompanyHoursAddDialog({ open, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +141,7 @@ export function CompanyHoursAddDialog({ open, onClose }: Props) {
         operator_name: form.operatorName.trim() || null,
         written_at_utc: serverTimestamp(),
       });
+      onSaved?.();
       onClose();
     } catch (err) {
       const msg =

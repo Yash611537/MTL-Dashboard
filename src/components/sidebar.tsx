@@ -12,7 +12,7 @@ const nav = [
   { href: "/cycle-data", label: "Cycle Data" },
   { href: "/daily-effeciency", label: "Daily Effeciency" },
   { href: "/inventory-management", label: "Inventory Management" },
-  { href: "/PREVIOUS-JUNK", label: "PREVIOUS JUNK" },
+  { href: "/ssd-to-hdd", label: "SSD TO HDD" },
 ];
 
 type Props = {
