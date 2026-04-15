@@ -11,12 +11,8 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-import type { CompanyHoursRow } from "@/types/company-hours";
-import {
-  companyHoursSegmentSortKey,
-  formatCompanyHoursDateCell,
-  hourSegmentLabel,
-} from "@/lib/aggregate-company-hours";
+import { formatCompanyHoursDateCell } from "@/lib/aggregate-company-hours";
+import type { CompanyHoursSummaryRow } from "@/types/company-hours";
 
 const PAGE_SIZES = [10, 25, 50, 100] as const;
 
@@ -25,7 +21,7 @@ function formatHours(n: number): string {
 }
 
 function globalFilterFn(
-  row: { original: CompanyHoursRow },
+  row: { original: CompanyHoursSummaryRow },
   _columnId: string,
   filterValue: string
 ) {
@@ -36,67 +32,50 @@ function globalFilterFn(
     r.companyName,
     r.dateKey,
     formatCompanyHoursDateCell(r.dateKey),
-    hourSegmentLabel(r.hourSegment),
     String(r.totalWorkers),
-    String(r.hourSegment === "gt7" ? r.totalWorkers * 2 : r.totalWorkers),
-    formatHours(r.totalVideoHours),
-    formatHours(r.totalActiveHours),
-    formatHours(r.activeHoursPerWorker),
+    formatHours(r.totalHours),
+    formatHours(r.totalUsableHours),
+    formatHours(r.goodPerPerson),
   ];
   return parts.some((p) => String(p ?? "").toLowerCase().includes(q));
 }
 
-export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
+export function CompanyHoursTable({ data }: { data: CompanyHoursSummaryRow[] }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "dateKey", desc: true }]);
   const [globalFilter, setGlobalFilter] = useState("");
 
-  const columns = useMemo<ColumnDef<CompanyHoursRow>[]>(
+  const columns = useMemo<ColumnDef<CompanyHoursSummaryRow>[]>(
     () => [
+      {
+        id: "dateKey",
+        accessorFn: (row) => row.dateKey,
+        header: "DATE OF RECORDING",
+        cell: ({ row }) => formatCompanyHoursDateCell(row.original.dateKey),
+        sortingFn: (a, b) => a.original.dateKey.localeCompare(b.original.dateKey),
+      },
       {
         accessorKey: "companyName",
         header: "COMPANY NAME",
         cell: (info) => info.getValue<string>() ?? "—",
       },
       {
-        id: "dateKey",
-        accessorFn: (row) => row.dateKey,
-        header: "DATE",
-        cell: ({ row }) => formatCompanyHoursDateCell(row.original.dateKey),
-        sortingFn: (a, b) => a.original.dateKey.localeCompare(b.original.dateKey),
-      },
-      {
-        id: "hourSegment",
-        accessorFn: (row) => row.hourSegment,
-        header: "SESSION VIDEO",
-        cell: ({ row }) => hourSegmentLabel(row.original.hourSegment),
-        sortingFn: (a, b) =>
-          companyHoursSegmentSortKey(a.original.hourSegment) -
-          companyHoursSegmentSortKey(b.original.hourSegment),
-      },
-      {
         accessorKey: "totalWorkers",
-        header: "TOTAL WORKERS",
-        cell: ({ row }) => {
-          const workers =
-            row.original.hourSegment === "gt7"
-              ? row.original.totalWorkers * 2
-              : row.original.totalWorkers;
-          return workers.toLocaleString();
-        },
+        header: "NO OF WORKERS",
+        cell: (info) => info.getValue<number>().toLocaleString(),
       },
       {
-        accessorKey: "totalVideoHours",
+        accessorKey: "totalHours",
         header: "TOTAL HOURS",
         cell: (info) => formatHours(info.getValue<number>()),
       },
       {
-        accessorKey: "totalActiveHours",
-        header: "TOTAL ACTIVE HOURS",
+        accessorKey: "totalUsableHours",
+        header: "TOTAL USABLE HOURS",
         cell: (info) => formatHours(info.getValue<number>()),
       },
       {
-        accessorKey: "activeHoursPerWorker",
-        header: "ACTIVE HOURS PER WORKER",
+        accessorKey: "goodPerPerson",
+        header: "GOOD / P",
         cell: (info) => formatHours(info.getValue<number>()),
       },
     ],
@@ -121,15 +100,9 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
   return (
     <div className="space-y-3 sm:space-y-4">
       <p className="text-sm text-slate-600">
-        Most companies: one row per day. If the company name contains{" "}
-        <span className="font-medium text-slate-800">PRABANZAN</span> or{" "}
-        <span className="font-medium text-slate-800">PRABANJAN</span> (any case), sessions are split
-        into ≤7 h and &gt;7 h video rows; for the &gt;7 h row only, active hours per worker is half
-        of the usual average. SESSION VIDEO defaults to “&lt;7hr / session” when there is no split.
-      </p>
-
-      <p className="text-sm font-bold text-red-600">
-        Total workers are multiplied by 2 where cards with more than 7 hours of recording
+        Source: <span className="font-medium text-slate-800">company_hours_summary</span>.
+        Rows with the same date and same company characters (ignoring separators such as dash and
+        underscore) are merged into one row.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -206,7 +179,7 @@ export function CompanyHoursTable({ data }: { data: CompanyHoursRow[] }) {
                     colSpan={columns.length}
                     className="px-3 py-12 text-center text-slate-500"
                   >
-                    No aggregated rows. Sessions need a recording, copy/paste, or written date.
+                    No company hours summary rows found.
                   </td>
                 </tr>
               ) : (

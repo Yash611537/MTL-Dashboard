@@ -1,177 +1,99 @@
 "use client";
 
-import { useMemo } from "react";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/header";
-import { useSdCardsAccumulatedBatches } from "@/hooks/use-sd-cards-accumulated-batches";
-import { FIRESTORE_PAGE_SIZE } from "@/lib/firestore-page-size";
 import { normalizeDateToYyyyMmDd } from "@/lib/format";
-import { sdCardsCollectionName } from "@/lib/sd-cards-collection";
-import type { SdCardRow } from "@/types/sd-card";
+import { getDb } from "@/lib/firebase";
 
-function collectionName(): string {
-  return sdCardsCollectionName();
-}
-
-function isTrueLike(v: unknown): boolean {
-  if (v === true || v === 1) return true;
-  if (typeof v === "string") {
-    const t = v.trim().toLowerCase();
-    return t === "true" || t === "1" || t === "yes";
-  }
-  return false;
-}
-
-type DailyAggregate = {
+type DailyEfficiencyRow = {
+  rowKey: string;
   dateKey: string;
-  cardsRead: number;
-  emptyCardsFound: number;
-  /** Card operator names for that day */
-  cardOperatorName: string;
-  transferCount: number;
+  numberOfCards: number;
+  cardOperators: string;
 };
 
-function aggregateByStorageDay(rows: SdCardRow[]): DailyAggregate[] {
-  const map = new Map<
-    string,
-    { cards: number; empty: number; ops: Set<string>; count: number }
-  >();
-
-  for (const r of rows) {
-    const dateKey = normalizeDateToYyyyMmDd(r.date_of_cop_paste);
-    if (!dateKey) continue;
-
-    const cur = map.get(dateKey) ?? {
-      cards: 0,
-      empty: 0,
-      ops: new Set<string>(),
-      count: 0,
-    };
-    // One SD_CARDS row is one processed card session.
-    cur.cards += 1;
-    if (isTrueLike(r.empty_card)) cur.empty += 1;
-    const op = (r.card_operator_name ?? "").trim();
-    if (op) cur.ops.add(op);
-    cur.count += 1;
-    map.set(dateKey, cur);
+function toNumberOrZero(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    if (Number.isFinite(n)) return n;
   }
-
-  return Array.from(map.entries())
-    .map(([dateKey, v]) => ({
-      dateKey,
-      cardsRead: v.cards,
-      emptyCardsFound: v.empty,
-      cardOperatorName:
-        v.ops.size === 0 ? "—" : Array.from(v.ops).sort((a, b) => a.localeCompare(b)).join(", "),
-      transferCount: v.count,
-    }))
-    .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  return 0;
 }
 
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function yesterdayKey(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+function cardOperatorsLabel(v: unknown): string {
+  if (Array.isArray(v)) {
+    const names = v
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+    return names.length ? names.join(", ") : "—";
+  }
+  const single = String(v ?? "").trim();
+  return single || "—";
 }
 
 export default function DailyEffeciencyPage() {
-  const coll = collectionName();
-  const {
-    rowsForAggregate: rows,
-    loading,
-    fetchingMore,
-    error,
-    goNext,
-    goPrev,
-    canGoNext,
-    canGoPrev,
-    recordCount,
-  } = useSdCardsAccumulatedBatches();
+  const [rows, setRows] = useState<DailyEfficiencyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const byDay = useMemo(() => aggregateByStorageDay(rows), [rows]);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const db = getDb();
+        const ref = collection(db, "daily_efficiency");
+        const q = query(ref, orderBy("date_of_copy_paste", "desc"));
+        const snap = await getDocs(q);
 
-  const today = todayKey();
-  const yesterday = yesterdayKey();
-  const todayAgg = useMemo(
-    () => byDay.find((d) => d.dateKey === today),
-    [byDay, today]
-  );
-  const yesterdayAgg = useMemo(
-    () => byDay.find((d) => d.dateKey === yesterday),
-    [byDay, yesterday]
+        const next: DailyEfficiencyRow[] = snap.docs.map((doc) => {
+          const data = doc.data() as Record<string, unknown>;
+          const dateKey = normalizeDateToYyyyMmDd(
+            data.date_of_copy_paste ?? data.date_of_transfer
+          );
+          const numberOfCards = toNumberOrZero(
+            data.cards_read ?? data.number_of_cards ?? data.no_of_cards
+          );
+
+          return {
+            rowKey: doc.id,
+            dateKey: dateKey || "—",
+            numberOfCards,
+            cardOperators: cardOperatorsLabel(data.card_operators),
+          };
+        });
+
+        setRows(next);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load daily_efficiency");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
+  }, []);
+
+  const tableRows = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        if (a.dateKey === "—" && b.dateKey === "—") return 0;
+        if (a.dateKey === "—") return 1;
+        if (b.dateKey === "—") return -1;
+        return b.dateKey.localeCompare(a.dateKey);
+      }),
+    [rows]
   );
 
   return (
     <>
       <Header
         title="Daily Effeciency"
-        subtitle={`Per day by SD_CARDS date of copy paste (${coll}). Data loads in batches of 25 documents.`}
+        subtitle="Table from daily_efficiency collection."
       />
       <main className="flex flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6">
-        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-700">
-            Showing totals from up to{" "}
-            <span className="font-semibold text-slate-900">{recordCount.toLocaleString()}</span>{" "}
-            SD card record{recordCount !== 1 ? "s" : ""} ({FIRESTORE_PAGE_SIZE} per Firestore step).
-            Use Next to include more.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!canGoPrev || fetchingMore}
-              onClick={goPrev}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!canGoNext || fetchingMore}
-              onClick={goNext}
-            >
-              {fetchingMore ? "Loading…" : "Next"}
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Today ({today})</p>
-            {todayAgg ? (
-              <p className="mt-1 text-sm text-slate-700">
-                Cards read: <span className="font-semibold">{todayAgg.cardsRead.toLocaleString()}</span>{" "}
-                · Empty cards found:{" "}
-                <span className="font-semibold">{todayAgg.emptyCardsFound.toLocaleString()}</span>
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-amber-700">
-                No SD_CARDS rows in the loaded sample for today.
-              </p>
-            )}
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Yesterday ({yesterday})</p>
-            {yesterdayAgg ? (
-              <p className="mt-1 text-sm text-slate-700">
-                Cards read:{" "}
-                <span className="font-semibold">{yesterdayAgg.cardsRead.toLocaleString()}</span> ·
-                Empty cards found:{" "}
-                <span className="font-semibold">
-                  {yesterdayAgg.emptyCardsFound.toLocaleString()}
-                </span>
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-amber-700">
-                No SD_CARDS rows in the loaded sample for yesterday.
-              </p>
-            )}
-          </div>
-        </div>
-
         {loading ? (
           <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 py-16 text-center text-sm text-slate-500 sm:px-6 sm:py-20 sm:text-base">
             <div className="flex items-center gap-3">
@@ -190,48 +112,37 @@ export default function DailyEffeciencyPage() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[680px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/90">
                     <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
-                      DATE OF COPY PASTE
+                      DATE OF TRANSFER
                     </th>
                     <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
-                      CARDS READ (DAY TOTAL)
+                      NUMBER OF CARDS
                     </th>
                     <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
-                      EMPTY CARDS FOUND (DAY TOTAL)
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
-                      CARD OPERATOR NAME
+                      CARD OPERATOR
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {byDay.length === 0 ? (
+                  {tableRows.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-12 text-center text-slate-500">
-                        No SD_CARDS rows with a valid copy-paste date in the loaded sample.
+                      <td colSpan={3} className="px-3 py-12 text-center text-slate-500">
+                        No daily efficiency rows found.
                       </td>
                     </tr>
                   ) : (
-                    byDay.map((d) => (
-                      <tr
-                        key={d.dateKey}
-                        className={`transition-colors hover:bg-slate-50/80 ${
-                          d.dateKey === today ? "bg-emerald-50/40" : "bg-white"
-                        }`}
-                      >
+                    tableRows.map((d) => (
+                      <tr key={d.rowKey} className="bg-white transition-colors hover:bg-slate-50/80">
                         <td className="whitespace-nowrap px-3 py-2 text-slate-800">{d.dateKey}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                          {d.cardsRead.toLocaleString()}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-800">
-                          {d.emptyCardsFound.toLocaleString()}
+                          {d.numberOfCards.toLocaleString()}
                         </td>
                         <td className="max-w-[280px] px-3 py-2 text-slate-700">
-                          <span className="line-clamp-2" title={d.cardOperatorName}>
-                            {d.cardOperatorName}
+                          <span className="line-clamp-2" title={d.cardOperators}>
+                            {d.cardOperators}
                           </span>
                         </td>
                       </tr>
@@ -240,10 +151,6 @@ export default function DailyEffeciencyPage() {
                 </tbody>
               </table>
             </div>
-            <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
-              Each row is one calendar day by date of copy paste. Numbers reflect only SD_CARDS
-              records included via the steps above (not necessarily the full collection).
-            </p>
           </div>
         )}
       </main>

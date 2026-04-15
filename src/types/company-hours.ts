@@ -14,3 +14,17 @@ export interface CompanyHoursRow {
   totalActiveHours: number;
   activeHoursPerWorker: number;
 }
+
+/** One row per company per day from `company_hours_summary`. */
+export interface CompanyHoursSummaryRow {
+  /** Stable id for table rows */
+  rowKey: string;
+  /** YYYY-MM-DD for sorting */
+  dateKey: string;
+  companyName: string;
+  totalWorkers: number;
+  totalHours: number;
+  totalUsableHours: number;
+  /** Good / P = total usable hours / total workers */
+  goodPerPerson: number;
+}
